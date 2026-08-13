@@ -1,0 +1,47 @@
+resource "aws_vpc" "this" {
+  cidr_block       = var.vpc_cidr
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "${var.name}-vpc"
+  }
+}
+
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.this.id
+
+  tags = {
+     Name = "${var.name}-gw"
+  }
+}
+
+resource "aws_subnet" "public_subnet" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = var.cidr_public_subnet
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${var.name}-public-subnet"
+  }
+}
+
+
+resource "aws_route_table" "route_table" {
+  vpc_id = aws_vpc.this.id
+
+  tags = {
+   Name = "${var.name}-public-rt" 
+  }
+}
+
+resource "aws_route" "internet_access" {
+  route_table_id         = aws_route_table.route_table.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.gw.id
+}
+
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.route_table.id
+}
