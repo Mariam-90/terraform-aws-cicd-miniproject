@@ -20,3 +20,7 @@ variable "cidr_public_subnet" {
   description = "The CIDR block for the public subnet"
   default     = "10.0.1.0/24"
 }
+variable "my_ip_cidr" {
+  type        = string
+  description = "My public IP address for SSH access"
+}

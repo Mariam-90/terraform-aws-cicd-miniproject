@@ -1,6 +1,7 @@
 resource "aws_vpc" "this" {
-  cidr_block       = var.vpc_cidr
-  instance_tenancy = "default"
+  cidr_block           = var.vpc_cidr
+  instance_tenancy     = "default"
+  enable_dns_hostnames = true
 
   tags = {
     Name = "${var.name}-vpc"
@@ -11,7 +12,7 @@ resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.this.id
 
   tags = {
-     Name = "${var.name}-gw"
+    Name = "${var.name}-gw"
   }
 }
 
@@ -30,7 +31,7 @@ resource "aws_route_table" "route_table" {
   vpc_id = aws_vpc.this.id
 
   tags = {
-   Name = "${var.name}-public-rt" 
+    Name = "${var.name}-public-rt"
   }
 }
 
