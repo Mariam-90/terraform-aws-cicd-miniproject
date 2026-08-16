@@ -21,3 +21,10 @@ variable "availability_zone" {
   type        = string
   default     = "us-east-1a"
 }
+
+
+variable "environment" {
+  description = "Deployment environment (dev/staging/production)"
+  type        = string
+  default     = "dev"
+}
