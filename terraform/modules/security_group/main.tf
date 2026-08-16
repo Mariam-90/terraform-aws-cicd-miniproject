@@ -4,7 +4,7 @@ resource "aws_security_group" "app_sg" {
   vpc_id      = var.vpc_id
 
   tags = {
-    Name = "${var.name}-app-sg"
+    Name = "${var.project_name}-app-sg"
   }
 }
 

@@ -9,7 +9,7 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-variable "name" {
+variable "project_name" {
   type        = string
   description = "Name of the VPC"
   default     = "terraform-vpc"
@@ -23,4 +23,25 @@ variable "cidr_public_subnet" {
 variable "my_ip_cidr" {
   type        = string
   description = "My public IP address for SSH access"
+}
+
+variable "ami_id" {
+  type        = string
+  description = "AMI ID for the EC2 instance (Ubuntu 22.04, region-specific — look this up, don't hardcode from a tutorial)"
+}
+
+variable "key_name" {
+  type        = string
+  description = "Name of your existing EC2 key pair for SSH access"
+}
+
+variable "github_repo_url" {
+  type        = string
+  description = "Git URL the instance clones on first boot"
+}
+
+variable "environment" {
+  type        = string
+  description = "Deployment environment"
+  default     = "dev"
 }

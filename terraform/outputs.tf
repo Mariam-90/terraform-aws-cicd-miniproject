@@ -13,3 +13,6 @@ output "internet_gateway" {
   value       = module.vpc.internet_gateway_id
   description = "The ID of the internet gateway"
 }
+output "app_public_ip" {
+  value = module.ec2.public_ip
+}

@@ -4,7 +4,7 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-variable "name" {
+variable "project_name" {
   type        = string
   description = "Name of the VPC"
   default     = "terraform"
@@ -14,4 +14,10 @@ variable "cidr_public_subnet" {
   type        = string
   description = "The CIDR block for the public subnet"
   default     = "10.0.1.0/24"
+}
+
+variable "availability_zone" {
+  description = "AZ for the public subnet"
+  type        = string
+  default     = "us-east-1a"
 }
