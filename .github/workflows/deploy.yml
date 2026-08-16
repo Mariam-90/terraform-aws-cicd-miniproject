@@ -1,0 +1,31 @@
+name: Deploy to EC2
+
+on:
+    push:
+        branches: [main]
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            # TODO: re-run the same test steps as test.yml (or call it as a reusable workflow)
+
+            - name: Deploy over SSH
+              uses: appleboy/ssh-action@v1
+              with:
+                  host: ${{ secrets.EC2_HOST }}
+                  username: ${{ secrets.EC2_USER }}
+                  key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+                  script: |
+                      cd /home/appuser/app
+                      git pull origin main
+                      source venv/bin/activate
+                      pip install -r requirements.txt
+                      sudo systemctl restart myapp
+
+            - name: Health check
+              run: |
+                  sleep 5
+                  curl -f http://${{ secrets.EC2_HOST }}:5000/health
