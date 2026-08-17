@@ -24,7 +24,8 @@ jobs:
           pip install flake8 bandit pytest-cov
 
       - name: flake8 Lint
-        uses: py-actions/flake8@v2
+        run: |
+          flake8 .
 
       - name: Security scan (bandit)
         run: bandit -r . -x ./tests
