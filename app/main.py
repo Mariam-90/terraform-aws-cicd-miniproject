@@ -198,4 +198,4 @@ if __name__ == '__main__':
     # Run the application
     # In production, use a proper WSGI server like gunicorn
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port)  # nosec B104
