@@ -49,4 +49,4 @@ jobs:
                       git pull origin main
                       soruce venv/bin/activate
                       pip install requirements.txt
-                      sudo systemctl restart myapp
+                      sudo systemctl restart flask-app
