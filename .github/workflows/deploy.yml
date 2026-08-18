@@ -54,3 +54,4 @@ jobs:
               run: |
                   sleep 5
                   curl -f http://${{ secrets.EC2_HOST }}:5000/health
+                  ## if
