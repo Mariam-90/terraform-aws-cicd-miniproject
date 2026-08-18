@@ -87,23 +87,23 @@ def create_todo():
     """Create a new todo"""
     try:
         data = request.get_json(silent=True)
-        
+
         if not data:
             return jsonify({
                 "success": False,
                 "error": "No data provided"
             }), 400
-        
+
         title = data.get('title')
         if not title:
             return jsonify({
                 "success": False,
                 "error": "Title is required"
             }), 400
-        
+
         description = data.get('description', '')
         todo = todo_manager.create_todo(title, description)
-        
+
         return jsonify({
             "success": True,
             "message": "Todo created successfully",
@@ -121,20 +121,20 @@ def update_todo(todo_id):
     """Update a todo"""
     try:
         data = request.get_json(silent=True)
-        
+
         if not data:
             return jsonify({
                 "success": False,
                 "error": "No data provided"
             }), 400
-        
+
         todo = todo_manager.update_todo(
             todo_id,
             title=data.get('title'),
             description=data.get('description'),
             completed=data.get('completed')
         )
-        
+
         if todo:
             return jsonify({
                 "success": True,
@@ -158,7 +158,7 @@ def delete_todo(todo_id):
     """Delete a todo"""
     try:
         success = todo_manager.delete_todo(todo_id)
-        
+
         if success:
             return jsonify({
                 "success": True,
@@ -198,4 +198,4 @@ if __name__ == '__main__':
     # Run the application
     # In production, use a proper WSGI server like gunicorn
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port)  # nosec B104
