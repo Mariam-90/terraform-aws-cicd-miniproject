@@ -50,3 +50,7 @@ jobs:
                       soruce venv/bin/activate
                       pip install requirements.txt
                       sudo systemctl restart flask-app
+            - name: Health check
+              run: |
+                  sleep 5
+                  curl -f http://${{ secrets.EC2_HOST }}:5000/health
