@@ -47,7 +47,7 @@ jobs:
                   key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
                   script: |
                       sudo -u appuser bash -c "cd /home/appuser/app && git pull origin main && source venv/bin/activate && pip install -r requirements.txt"
-                      sudo systemctl restart myapp
+                      sudo systemctl restart flask-app
             - name: Health check
               run: |
                   sleep 5
