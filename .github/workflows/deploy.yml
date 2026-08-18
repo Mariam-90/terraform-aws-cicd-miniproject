@@ -7,7 +7,32 @@ on:
 jobs:
     deploy:
         runs-on: ubuntu-latest
+
         steps:
             - uses: actions/checkout@v5
-            - name: Call another workflow
-              uses: ./.github/workflows/test.yml
+
+            - name: Set up Python 3.11
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.11"
+
+            - name: Install dependencies
+              working-directory: app
+              run: |
+                  pip install -r requirements.txt
+                  pip install flake8 bandit pytest-cov
+
+            - name: flake8 Lint
+              working-directory: app
+              run: |
+                  flake8 . --exclude=venv,.venv
+
+            - name: Security scan
+              working-directory: app
+              run: |
+                  bandit -r . -x ./tests
+
+            - name: Run tests with coverage
+              working-directory: app
+              run: |
+                  pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=80
