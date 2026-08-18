@@ -7,6 +7,9 @@ on:
 jobs:
     deploy:
         runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: app
 
         steps:
             - uses: actions/checkout@v5
@@ -36,3 +39,14 @@ jobs:
               working-directory: app
               run: |
                   pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=80
+            - name: Deploy over SSH
+              uses: appleboy/ssh-action@v1
+              with:
+                  host: ${{ secrets.EC2_HOST }}
+                  username: ${{ secrets.EC2_USER }}
+                  key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+                  script: cd /home/appuser/app
+                      git pull origin main
+                      soruce venv/bin/activate
+                      pip install requirements.txt
+                      sudo systemctl restart myapp
