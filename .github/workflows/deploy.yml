@@ -9,3 +9,5 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v5
+            - name: Call another workflow
+              uses: ./.github/workflows/test.yml

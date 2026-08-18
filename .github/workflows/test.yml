@@ -25,7 +25,7 @@ jobs:
 
       - name: flake8 Lint
         run: |
-          flake8 .
+          flake8 . --exclude=venv,.venv
 
       - name: Security scan (bandit)
         run: bandit -r . -x ./tests
