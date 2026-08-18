@@ -9,5 +9,3 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v5
-
-            # TODO: re-run the same test steps as test.yml (or call it as a reusable workflow)
