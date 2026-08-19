@@ -1,868 +1,211 @@
-# Mini Project 1: Deploy a Web App with Full CI/CD Pipeline
+# Terraform + Flask CI/CD Mini Project
 
-## 🎯 Project Overview
+A Flask REST API, provisioned on AWS EC2 with modular Terraform, automatically tested on every pull request and automatically deployed to production on every merge to `main` via GitHub Actions.
 
-This capstone project integrates everything you've learned in the DevOps course so far: **Git source control**, **Terraform**, **GitHub Actions**, and **AWS**. You'll build a complete CI/CD pipeline that automatically tests Python code and deploys it to an AWS EC2 instance.
-
-### What You'll Build:
-- 🏗️ **Infrastructure as Code** - Provision AWS EC2 with Terraform
-- 🐍 **Python Web Application** - A simple REST API with business logic
-- 🧪 **Automated Testing** - Unit tests, linting, and code coverage
-- 🚀 **CI/CD Pipeline** - Automated testing on PRs and deployment on merge
-- 🔒 **Security Best Practices** - Secrets management and secure deployment
+**Live flow in one sentence:** push code → GitHub Actions lints/scans/tests it → on merge to `main`, GitHub Actions SSHes into the EC2 instance, pulls the new code, reinstalls dependencies, and restarts the app — all without anyone touching the AWS Console.
 
 ---
 
-## 📁 Project Structure
+## Architecture
 
 ```
-mini-project1/
-├── terraform/                     # YOU CREATE THIS - Terraform infrastructure code
-│   ├── main.tf                    # Main infrastructure configuration
-│   ├── variables.tf               # Input variables
-│   ├── outputs.tf                 # Output values (EC2 IP, etc.)
-│   ├── terraform.tfvars.example   # Example variables file
-│   └── modules/                   # Terraform modules (VPC, Security Group, EC2)
-│       ├── vpc/
-│       │   ├── main.tf
-│       │   ├── variables.tf
-│       │   └── outputs.tf
-│       ├── security_group/
-│       │   ├── main.tf
-│       │   ├── variables.tf
-│       │   └── outputs.tf
-│       └── ec2/
-│           ├── main.tf
-│           ├── variables.tf
-│           ├── outputs.tf
-│           └── user_data.sh       # EC2 bootstrap script
-├── app/                           # PROVIDED - Python application
-│   ├── main.py                    # Flask REST API
-│   ├── business_logic.py          # Core business logic functions
-│   ├── requirements.txt           # Python dependencies
+GitHub repo
+├── terraform/                 Infrastructure as Code (provisions AWS)
+│   ├── main.tf                 wires the 3 modules together
+│   ├── variables.tf
+│   ├── outputs.tf
+│   ├── terraform.tfvars        (gitignored — your real values)
+│   └── modules/
+│       ├── vpc/                 VPC, subnet, internet gateway, route table
+│       ├── security_group/      firewall rules (SSH, HTTP, HTTPS, app port)
+│       └── ec2/                 the EC2 instance + first-boot bootstrap script
+│
+├── app/                        Flask REST API (Todo API)
+│   ├── main.py
+│   ├── business_logic.py
+│   ├── requirements.txt
 │   └── tests/
-│       ├── test_logic.py          # Unit tests for business logic
-│       └── test_api.py            # API endpoint tests
-├── .github/                       # YOU CREATE THIS - GitHub Actions workflows
-│   └── workflows/
-│       ├── test.yml               # Run tests on pull requests
-│       └── deploy.yml             # Deploy to EC2 on merge to main
-├── .gitignore                     # Ignore sensitive files
-└── README.md                      # This file
+│
+└── .github/workflows/
+    ├── test.yml                 runs on every pull request
+    └── deploy.yml                runs on every push to main
 ```
 
-**Note:** The Python application code is provided. You need to create:
-- ✅ Terraform infrastructure using modules
-- ✅ GitHub Actions workflows
-- ✅ Deployment scripts (optional)
+### Request flow once deployed
+```
+Internet → EC2 Security Group (port 5000) → gunicorn (3 workers) → Flask app (main:app)
+```
+gunicorn is managed by a systemd service (`flask-app.service`) so it survives reboots and restarts automatically if it crashes.
 
 ---
 
-## 🏗️ Part 1: Infrastructure (Terraform) - **YOU CREATE THIS**
+## Prerequisites
 
-### ⚠️ Important: Use Terraform Modules!
-
-Your Terraform code **MUST** be organized into reusable modules. Create separate modules for:
-
-1. **VPC Module** (`modules/vpc/`)
-   - VPC with proper CIDR
-   - Internet Gateway
-   - Public subnet
-   - Route table and associations
-
-2. **Security Group Module** (`modules/security_group/`)
-   - Security group with proper rules
-   - Configurable ports and CIDR blocks
-
-3. **EC2 Module** (`modules/ec2/`)
-   - EC2 instance
-   - User data script
-   - Optional Elastic IP
-
-### Resources to Create:
-
-#### Module 1: VPC
-- **VPC**: CIDR 10.0.0.0/16
-- **Internet Gateway**: For internet access
-- **Public Subnet**: CIDR 10.0.1.0/24
-- **Route Table**: Route to internet gateway
-
-#### Module 2: Security Group
-Configure inbound rules:
-- **SSH** (port 22) - Your IP only (for security)
-- **HTTP** (port 80) - 0.0.0.0/0 (optional)
-- **HTTPS** (port 443) - 0.0.0.0/0 (optional)
-- **App Port** (port 5000) - 0.0.0.0/0 (for Flask API)
-
-Outbound rules:
-- Allow all outbound traffic
-
-#### Module 3: EC2
-- **Instance Type**: `t3.micro` (free tier eligible)
-- **AMI**: Ubuntu 22.04 LTS
-- **Storage**: 8GB root volume
-- **Key Pair**: Your SSH key pair name
-- **Tags**: Environment, Project name
-
-#### User Data Script
-Create a bash script in `modules/ec2/user_data.sh` to:
-- Update system packages (`apt-get update && apt-get upgrade`)
-- Install Python 3.11+ (`apt-get install python3.11 python3-pip git`)
-- Create app user and directory
-- Clone your GitHub repository
-- Create Python virtual environment
-- Install dependencies from requirements.txt
-- Install gunicorn (production WSGI server)
-- Create systemd service file
-- Start the application service
-
-**Tip:** Use `templatefile()` function to pass variables to user_data.sh
-
-### Main Configuration Files:
-
-#### `main.tf`
-- Call all three modules
-- Pass outputs between modules
-- Configure AWS provider
-
-#### `terraform.tfvars.example`
-Provide example values for all variables
-
-### Module Structure Example:
-
-Each module should have:
-- `main.tf` - Resource definitions
-- `variables.tf` - Input variables
-- `outputs.tf` - Output values
-
-```
-modules/
-├── vpc/
-│   ├── main.tf          # VPC, IGW, Subnet, Route Table
-│   ├── variables.tf     # project_name, environment
-│   └── outputs.tf       # vpc_id, subnet_id
-├── security_group/
-│   ├── main.tf          # Security group rules
-│   ├── variables.tf     # vpc_id, allowed_cidr, ports
-│   └── outputs.tf       # security_group_id
-└── ec2/
-    ├── main.tf          # EC2 instance
-    ├── variables.tf     # All EC2 configs
-    ├── outputs.tf       # instance_id, public_ip
-    └── user_data.sh     # Bootstrap script
-```
+- AWS account with an IAM user that has programmatic access (access key + secret)
+- [Terraform](https://developer.hashicorp.com/terraform/install) v1.5+
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), configured via `aws configure`
+- Python 3.11+ (for running the app locally)
+- An existing EC2 key pair in your target AWS region (for SSH access)
+- Git and a GitHub account
 
 ---
 
-## 🐍 Part 2: Python Application - **PROVIDED**
-
-The Python application is **already provided** in the `app/` folder!
-
-### What's Included:
-
-#### **Todo API** - A simple task management REST API
-
-**Files:**
-- `main.py` - Flask REST API with 7 endpoints
-- `business_logic.py` - TodoManager class with all CRUD operations
-- `requirements.txt` - All dependencies
-- `tests/test_logic.py` - 20+ unit tests for business logic
-- `tests/test_api.py` - 15+ integration tests for API endpoints
-
-**Endpoints:**
-```
-GET    /api/todos          - List all todos
-POST   /api/todos          - Create a new todo
-GET    /api/todos/{id}     - Get specific todo
-PUT    /api/todos/{id}     - Update todo
-DELETE /api/todos/{id}     - Delete todo
-GET    /health             - Health check endpoint
-GET    /                   - Welcome page
-```
-
-**Data Model:**
-```python
-{
-    "id": 1,
-    "title": "Learn DevOps",
-    "description": "Complete mini project",
-    "completed": false,
-    "created_at": "2025-12-20T10:00:00Z",
-    "updated_at": "2025-12-20T10:00:00Z"
-}
-```
-
-**Features:**
-- In-memory storage
-- CRUD operations
-- Input validation
-- Proper error handling
-- RESTful API design
-
-### Running the Application Locally:
+## 1. Provision the infrastructure
 
 ```bash
-# Navigate to the app directory
+cd terraform/
+```
+
+Create `terraform.tfvars` (this file is gitignored — never commit it):
+```hcl
+ami_id           = "ami-xxxxxxxxxxxxxxxxx"   # current Ubuntu 22.04 AMI for your region — see note below
+my_ip_cidr       = "YOUR.PUBLIC.IP.HERE/32"  # curl ifconfig.me, then append /32
+key_name         = "your-ec2-key-pair-name"  # must already exist in AWS, same region
+github_repo_url  = "https://github.com/your-username/your-repo.git"
+
+# optional overrides — sensible defaults exist for all of these
+# region             = "us-east-1"
+# vpc_cidr           = "10.0.0.0/16"
+# project_name       = "terraform-vpc"
+# cidr_public_subnet = "10.0.1.0/24"
+# environment        = "dev"
+```
+
+**Finding a current AMI ID** — AMI IDs are region-specific and change over time, don't reuse an old one from a tutorial:
+```bash
+aws ec2 describe-images \
+  --owners 099720109477 \
+  --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" "Name=virtualization-type,Values=hvm" \
+  --query 'sort_by(Images, &CreationDate)[-1].[ImageId,Name]' \
+  --output table
+```
+
+Then:
+```bash
+terraform init
+terraform plan     # review before applying
+terraform apply
+```
+
+After it finishes, get the public IP:
+```bash
+terraform output app_public_ip
+```
+
+Give the instance 1–2 minutes after creation — its first-boot script (`user_data.sh`) needs time to install Python, clone the repo, build the virtualenv, and start the app before it's actually reachable.
+
+---
+
+## 2. What happens automatically on first boot
+
+`modules/ec2/user_data.sh` runs once, the very first time the instance starts:
+
+1. Updates the system and installs Python 3.11, pip, and git.
+2. Creates a dedicated low-privilege user, `appuser` (the app never runs as root).
+3. Clones this repository into `/home/appuser/app`.
+4. Creates a Python virtualenv at `/home/appuser/app/venv`.
+5. Installs dependencies from `app/app/requirements.txt` (see the folder-nesting note below).
+6. Installs gunicorn (a production WSGI server — Flask's built-in dev server isn't meant for real traffic).
+7. Writes a systemd unit file (`/etc/systemd/system/flask-app.service`) so the app restarts automatically on crash or reboot.
+8. Enables and starts the service.
+
+**Important, non-obvious detail:** because `user_data.sh` clones the *entire* repository (not just the `app/` folder) into `/home/appuser/app`, the actual Flask code ends up nested one level deeper, at `/home/appuser/app/app/`. Every path in the systemd service, the deploy script, and this README accounts for that nesting — if you restructure the repo later, update those paths too.
+
+**Also important:** `user_data.sh` only ever runs on first boot. If you edit it after an instance already exists, nothing happens to that running instance — Terraform won't retroactively re-run it. To pick up changes, force a replace:
+```bash
+terraform apply -replace="module.ec2.aws_instance.app"
+```
+(this gives the instance a new public IP — update the `EC2_HOST` GitHub secret afterward)
+
+---
+
+## 3. Run the app locally
+
+```bash
 cd app/
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On Linux/Mac:
-source venv/bin/activate
-
-# Install dependencies
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Run the application
-python main.py
-
-# Visit http://localhost:5000
+python3 main.py
 ```
+Visit `http://localhost:5000`.
 
-### Running Tests:
+**macOS note:** port 5000 is often already taken by Control Center's AirPlay Receiver feature. If you get "Address already in use," either disable it (System Settings → General → AirDrop & Handoff → turn off AirPlay Receiver) or run the app on a different local port for testing.
 
+### Endpoints
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | Welcome page |
+| GET | `/health` | Health check |
+| GET | `/api/todos` | List all todos |
+| POST | `/api/todos` | Create a todo |
+| GET | `/api/todos/{id}` | Get one todo |
+| PUT | `/api/todos/{id}` | Update a todo |
+| DELETE | `/api/todos/{id}` | Delete a todo |
+
+### Run the tests
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=. --cov-report=term-missing
-
-# Run specific test file
-pytest tests/test_logic.py -v
-```
-
-### Test Coverage:
-
-The provided tests achieve **>90% code coverage**:
-- ✅ 20+ unit tests for business logic
-- ✅ 15+ integration tests for API endpoints
-- ✅ Edge cases and error scenarios
-- ✅ Input validation tests
-
----
-
-## 🔄 Part 3: GitHub Actions Workflows - **YOU CREATE THIS**
-
-### Workflow 1: Test on Pull Request (`test.yml`)
-
-**Triggers:** When a PR is opened or updated
-
-**Steps:**
-1. **Checkout code**
-2. **Set up Python 3.11**
-3. **Install dependencies**
-4. **Lint code** with flake8
-   - Check for syntax errors
-   - Check code style (PEP 8)
-5. **Security scan** with bandit
-   - Check for common security issues
-6. **Run unit tests**
-   - Execute all tests with pytest
-   - Generate coverage report
-7. **Check coverage**
-   - Fail if coverage < 80%
-8. **Comment results on PR** (optional)
-
-**Success Criteria:**
-- ✅ All tests pass
-- ✅ No linting errors
-- ✅ No security issues
-- ✅ Code coverage ≥ 80%
-
-**Starter template** (fill in the steps yourself):
-```yaml
-name: Test on Pull Request
-
-on:
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      # Add your steps here...
+pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=80
 ```
 
 ---
 
-### Workflow 2: Deploy to EC2 (`deploy.yml`)
+## 4. CI/CD pipeline
 
-**Triggers:** Push to `main` branch (after PR merge)
+### `test.yml` — runs on every pull request into `main`
+1. Checks out the code and sets up Python 3.11.
+2. Installs dependencies (`requirements.txt` + `flake8`, `bandit`, `pytest-cov`).
+3. **Lints** with flake8 — style/syntax issues.
+4. **Security-scans** with bandit — flags risky patterns like hardcoded secrets or unsafe `eval()`/`subprocess` usage.
+5. **Runs tests with coverage** — fails the whole job if total coverage drops below 80% (`--cov-fail-under=80`).
 
-**Steps:**
-1. **Checkout code**
-2. **Run tests** (same as test workflow)
-3. **Configure AWS credentials** (optional - if using AWS CLI)
-4. **SSH into EC2 instance**
-   - Use GitHub Secrets for SSH key
-5. **Deploy application**
-   - Pull latest code from GitHub
-   - Install/update dependencies
-   - Restart application service
-6. **Health check**
-   - Wait for app to start
-   - Test `/health` endpoint
-   - Verify app is responding
-7. **Notify deployment status**
-   - Success or failure message
+A PR can't be safely merged unless all of these pass.
 
-**Deployment Methods:**
+### `deploy.yml` — runs on every push to `main`
+1. Re-runs the same lint/security/test steps (never deploy code that hasn't just been verified).
+2. SSHes into the EC2 instance (via `appleboy/ssh-action`) as `appuser`, pulls the latest code, reinstalls dependencies, and restarts `flask-app.service`.
+3. Runs a health check (`curl -f .../health`) against the live instance — fails the job if the app doesn't come back up cleanly.
 
-**Method A: Direct Deployment (Simpler)**
+### Required GitHub Secrets
+Repo → Settings → Secrets and variables → Actions:
+
+| Secret | Value |
+|---|---|
+| `EC2_HOST` | The EC2 instance's public IP (`terraform output app_public_ip`) — **must be updated any time the instance is replaced** |
+| `EC2_USER` | `ubuntu` |
+| `EC2_SSH_PRIVATE_KEY` | Contents of your `.pem` key file |
+
+---
+
+## 5. Security decisions and trade-offs
+
+- **SSH access** is split into two rules: one restricted to the developer's own IP (`my_ip_cidr`) for manual access, and a second rule open to `0.0.0.0/0` specifically so GitHub Actions' hosted runners (whose IPs are not fixed or predictable) can reach the instance to deploy. This is a deliberate, documented trade-off for a student project — in a production environment, the CI rule would instead be scoped to GitHub's published runner IP ranges (refreshed per deployment), or replaced entirely with AWS Systems Manager Session Manager, which avoids exposing port 22 to the internet at all.
+- **The app runs as a dedicated non-root user** (`appuser`), not as `ubuntu` or `root` — limiting blast radius if the app itself is ever compromised.
+- **`.gitignore`** excludes `*.tfstate`, `*.tfvars` (except the tracked `.example`), `.terraform/`, `*.pem`, and `.env` — none of these should ever be committed, since they can contain resource IDs, credentials, or infrastructure state.
+- **No AWS or SSH credentials are hardcoded anywhere in the codebase** — everything sensitive is injected via GitHub Secrets at workflow runtime.
+
+---
+
+## 6. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `terraform apply` fails with `InvalidAMIID.Malformed` | `ami_id` isn't a real AMI ID (e.g. a name was pasted instead) | Look up the current AMI ID with the `describe-images` command above |
+| `Your requested instance type is not supported in your requested Availability Zone` | AWS auto-assigned an AZ that doesn't support `t3.micro` for this account | Pin `availability_zone` explicitly in the VPC module's subnet (e.g. `us-east-1a`) |
+| SSH `Permission denied` connecting as `ubuntu` to `/home/appuser` | `appuser`'s home directory is `700` — only `appuser` can enter it | Use `sudo` (or `sudo -u appuser`) for anything touching `/home/appuser`, including in `deploy.yml` |
+| Deploy fails with `pip install requirements.txt` file-not-found | Forgot the nested `app/app/` folder structure, or forgot `-r` flag | Ensure the deploy script does `cd app` before `pip install -r requirements.txt`, from inside `/home/appuser/app` |
+| `Failed to restart flask-app.service: Unit not found` | The running instance booted from an older/different version of `user_data.sh` | Force instance replacement: `terraform apply -replace="module.ec2.aws_instance.app"` |
+| Deploy workflow: `dial tcp ***:22: i/o timeout` | `EC2_HOST` secret is stale after instance replacement, or security group blocks GitHub's runner IP | Update `EC2_HOST`, and confirm SSH (22) is reachable from `0.0.0.0/0` or GitHub's runner ranges |
+| flake8 fails with `W293 blank line contains whitespace` | Trailing whitespace on an otherwise blank line | `sed -i '' -E 's/[[:space:]]+$//' path/to/file.py` (use `[[:space:]]`, not `\t` — BSD/macOS `sed` doesn't interpret `\t` as tab and will corrupt words ending in the letter "t") |
+| GitHub Actions never runs on a new PR | Workflow file only exists on the feature branch, not on `main` yet | GitHub requires `pull_request`-triggered workflows to already exist on the base branch — merge the workflow file to `main` first, then open a fresh PR to see it trigger |
+
+---
+
+## 7. Tearing it down
+
+To avoid ongoing AWS charges when you're done:
 ```bash
-# SSH to EC2
-# Pull code: git pull origin main
-# Install deps: pip install -r requirements.txt
-# Restart: systemctl restart myapp (or use screen/tmux)
+cd terraform/
+terraform destroy
 ```
-
-**Method B: Systemd Service (Recommended)**
-```bash
-# Create systemd service file
-# Enable and start service
-# Automatic restart on failure
-```
-
----
-
-## 🔒 Part 4: Security & Secrets Management
-
-### GitHub Secrets to Configure:
-
-1. **AWS_ACCESS_KEY_ID** - AWS credentials (if using AWS CLI)
-2. **AWS_SECRET_ACCESS_KEY** - AWS secret key
-3. **EC2_SSH_PRIVATE_KEY** - Private key for SSH access
-4. **EC2_HOST** - Public IP of EC2 instance
-5. **EC2_USER** - Username (ubuntu/ec2-user)
-
-### Security Best Practices:
-
-- ✅ Never commit credentials to Git
-- ✅ Use `.gitignore` for sensitive files
-- ✅ Restrict Security Group access
-- ✅ Use IAM roles instead of access keys (advanced)
-- ✅ Rotate credentials regularly
-- ✅ Use HTTPS in production (Let's Encrypt)
-- ✅ Keep dependencies updated
-
-### Files to Ignore (`.gitignore`):
-```
-# Python
-__pycache__/
-*.py[cod]
-*.so
-.Python
-*.egg-info/
-venv/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Terraform
-*.tfstate
-*.tfstate.*
-.terraform/
-*.tfvars
-!terraform.tfvars.example
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Secrets
-*.pem
-*.key
-.env
-```
-
----
-
-## 📋 Implementation Steps
-
-### Phase 1: Infrastructure Setup
-
-1. **Set up AWS Account**
-   - Create/use existing AWS account
-   - Configure AWS CLI (optional)
-
-2. **Write Terraform Code**
-   - Define EC2 instance
-   - Create security group
-   - Write user data script
-   - Test with `terraform plan`
-
-3. **Provision Infrastructure**
-   - Run `terraform apply`
-   - Save outputs (IP address)
-   - Test SSH access
-
-### Phase 2: Application Development (provided)
-
-4. **Explore the Application**
-   - Read through `main.py` and `business_logic.py`
-   - Run it locally
-   - Test all endpoints manually
-
-5. **Run the Tests**
-   - Execute `pytest tests/ -v`
-   - Review coverage report
-   - Understand what each test covers
-
-6. **Test Locally**
-   - Run application locally
-   - Test all endpoints
-   - Verify tests pass
-
-### Phase 3: CI/CD Setup
-
-7. **Configure GitHub Secrets**
-   - Add AWS credentials
-   - Add SSH private key
-   - Add EC2 host information
-
-8. **Create Test Workflow**
-   - Write `.github/workflows/test.yml`
-   - Test on a feature branch
-   - Verify workflow runs
-
-9. **Create Deployment Workflow**
-   - Write `.github/workflows/deploy.yml`
-   - Create deployment script
-   - Test deployment manually first
-
-10. **Test Full Pipeline**
-    - Create feature branch
-    - Make a change
-    - Open PR → verify tests run
-    - Merge PR → verify deployment
-    - Check app is live
-
-### Phase 4: Documentation & Polish
-
-11. **Document Everything**
-    - Setup instructions
-    - How to run locally
-    - How to deploy
-    - Troubleshooting guide
-
-12. **Create Demo**
-    - Record video or take screenshots
-    - Show PR → test → merge → deploy flow
-    - Demonstrate live application
-
----
-
-## 🎓 Learning Objectives
-
-By completing this project, you will demonstrate:
-
-### 1. **Terraform Skills**
-- ✅ Provision cloud infrastructure using modules
-- ✅ Manage security groups and networking
-- ✅ Use variables and outputs effectively
-- ✅ Infrastructure as code best practices
-- ✅ Create reusable Terraform modules
-
-### 2. **GitHub Actions / CI/CD**
-- ✅ Create automated testing pipeline
-- ✅ Implement automated deployment
-- ✅ Configure workflow triggers
-- ✅ Manage secrets securely
-- ✅ Integrate multiple jobs and steps
-
-### 3. **Testing & Quality Assurance**
-- ✅ Run automated tests in CI
-- ✅ Implement code coverage checks
-- ✅ Set up linting and security scanning
-- ✅ Understand test-driven workflows
-
-### 4. **Git Source Control**
-- ✅ Branch-based workflow
-- ✅ Pull request process
-- ✅ Code review practices
-- ✅ Merge strategies
-
-### 5. **DevOps Practices**
-- ✅ Continuous Integration
-- ✅ Continuous Deployment
-- ✅ Infrastructure automation
-- ✅ Configuration management
-
-### 6. **AWS/Cloud**
-- ✅ EC2 instance management
-- ✅ VPC and networking
-- ✅ Security groups configuration
-- ✅ SSH access and remote deployment
-- ✅ User data scripts for bootstrapping
-
----
-
-## 📊 Grading Rubric (100 points)
-
-### Infrastructure - Terraform Modules (30 points)
-- [ ] VPC module created correctly (8 pts)
-- [ ] Security Group module with proper rules (7 pts)
-- [ ] EC2 module with user_data script (10 pts)
-- [ ] Main configuration uses modules correctly (5 pts)
-
-### CI/CD Pipeline (35 points)
-- [ ] Test workflow triggers on PR (8 pts)
-- [ ] Test workflow runs all quality checks (linting, security, tests) (10 pts)
-- [ ] Deploy workflow triggers on merge to main (7 pts)
-- [ ] Deployment succeeds automatically (8 pts)
-- [ ] Post-deployment health check works (2 pts)
-
-### Git Workflow (15 points)
-- [ ] Proper branch strategy used (5 pts)
-- [ ] Pull request created and merged (5 pts)
-- [ ] Commit messages are clear (3 pts)
-- [ ] .gitignore properly configured (2 pts)
-
-### Deployment & Integration (15 points)
-- [ ] Application deployed successfully to EC2 (5 pts)
-- [ ] Application is accessible via public IP (5 pts)
-- [ ] All API endpoints work on deployed instance (3 pts)
-- [ ] GitHub Secrets configured correctly (2 pts)
-
-### Documentation (5 points)
-- [ ] Setup instructions are clear and accurate (3 pts)
-- [ ] Terraform usage documented (2 pts)
-
----
-
-**Note:** Application code is provided, so grading focuses on infrastructure, CI/CD, and deployment!
-
----
-
-## 🚀 Bonus Challenges (+45 points possible)
-
-Want to go further? Try these advanced features:
-
-### 1. **Elastic IP** (+3 pts)
-- Add Elastic IP to EC2 module
-- Persist IP address across instance restarts
-- Update outputs accordingly
-
-### 2. **Multiple Environments** (+5 pts)
-- Create separate workspaces for dev/staging/prod
-- Environment-specific variable files
-- Deploy to staging first, then production
-
-### 3. **Blue-Green Deployment** (+5 pts)
-- Deploy to new EC2 instance
-- Switch traffic after health check passes
-- Keep old instance for quick rollback
-
-### 4. **Monitoring & Logging** (+3 pts)
-- Add CloudWatch logs integration
-- Set up basic CloudWatch metrics
-- Create alarms for application health
-
-### 5. **Auto Scaling** (+5 pts)
-- Add Application Load Balancer
-- Create Auto Scaling Group
-- Deploy to multiple instances
-
-### 6. **Rollback Capability** (+3 pts)
-- Keep previous deployment
-- Automatic rollback on failed health check
-- Manual rollback GitHub Action
-
-### 7. **Docker Containerization** (+5 pts)
-- Create Dockerfile for application
-- Deploy as container instead of direct Python
-- Use docker-compose for local development
-
-### 8. **HTTPS/SSL** (+3 pts)
-- Configure SSL certificate (Let's Encrypt)
-- Add Route53 for custom domain
-- Redirect HTTP to HTTPS
-
-### 9. **Notifications** (+2 pts)
-- Slack/Discord notifications on deployment
-- Email notifications on failures
-- Status badges in README
-
-### 10. **Terraform Remote State** (+3 pts)
-- Configure S3 backend for state
-- Enable state locking with DynamoDB
-- Share state across team
-
-### 11. **Performance Tests** (+3 pts)
-- Add load testing (e.g. locust or k6)
-- Benchmark endpoints
-- Response time checks in CI
-
-### 12. **Security Hardening** (+5 pts)
-- Add OWASP-aligned bandit checks to CI
-- Enforce secret scanning with `git-secrets` or GitHub's secret scanning
-- Lock down Security Group to minimum required ports
-
----
-
-## 🛠️ Tools & Technologies
-
-### Required:
-- **AWS Account** (Free tier sufficient)
-- **Terraform** (v1.5+)
-- **Python** (3.11+)
-- **Git & GitHub**
-- **Code Editor** (VS Code recommended)
-
-### Testing:
-- **pytest** - Testing framework
-- **pytest-cov** - Coverage reporting
-- **flake8** - Linting
-- **bandit** - Security scanning
-
----
-
-## 📚 Resources
-
-### Terraform:
-- [Terraform AWS Provider Docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [Terraform EC2 Example](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
-
-### Python/Flask:
-- [Flask Documentation](https://flask.palletsprojects.com/)
-- [Flask REST API Tutorial](https://flask.palletsprojects.com/en/latest/quickstart/)
-- [pytest Documentation](https://docs.pytest.org/)
-
-### GitHub Actions:
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [SSH Action](https://github.com/marketplace/actions/ssh-remote-commands)
-- [Using Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
-
-### AWS:
-- [EC2 User Guide](https://docs.aws.amazon.com/ec2/)
-- [EC2 Security Groups](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html)
-
----
-
-## ⚠️ Common Issues & Troubleshooting
-
-### Issue 1: SSH Connection Failed
-**Symptoms:** Can't connect to EC2 instance
-**Solutions:**
-- Check security group allows your IP on port 22
-- Verify private key permissions: `chmod 400 key.pem`
-- Use correct username (ubuntu/ec2-user)
-- Check EC2 instance is running
-
-### Issue 2: Application Not Accessible
-**Symptoms:** Can't access app via browser
-**Solutions:**
-- Check security group allows port 5000/8000
-- Verify app is running: `ps aux | grep python`
-- Check app logs for errors
-- Ensure app binds to 0.0.0.0, not 127.0.0.1
-
-### Issue 3: GitHub Actions Deployment Fails
-**Symptoms:** Deploy workflow fails at SSH step
-**Solutions:**
-- Verify GitHub Secrets are set correctly
-- Check SSH key format (no extra spaces/newlines)
-- Ensure EC2_HOST has correct IP address
-- Test SSH manually first
-
-### Issue 4: Tests Pass Locally, Fail in CI
-**Symptoms:** Tests work on your machine, fail in GitHub Actions
-**Solutions:**
-- Check Python version matches
-- Verify all dependencies in requirements.txt
-- Check for hardcoded paths
-- Review test output logs in Actions
-
-### Issue 5: Terraform Apply Fails
-**Symptoms:** Can't provision infrastructure
-**Solutions:**
-- Check AWS credentials are configured
-- Verify region is correct
-- Check AWS service limits
-- Review terraform error messages
-
----
-
-## 🎯 Success Criteria
-
-Your project is successful when:
-
-### ✅ Infrastructure
-- Terraform modules are well-organized
-- EC2 instance provisions successfully
-- VPC and networking configured correctly
-- Security groups have proper rules
-- Can SSH into the instance
-
-### ✅ Application Deployment
-- Application runs without errors on EC2
-- All endpoints respond correctly
-- Health check returns 200 OK
-- Accessible via public IP
-
-### ✅ CI/CD Pipeline
-- Test workflow runs on every PR
-- All tests pass in CI environment
-- No linting or security issues
-- Deploy workflow runs on merge to main
-- Deployment completes successfully automatically
-
-### ✅ Git Workflow
-- Feature branches used properly
-- Pull requests created and reviewed
-- Clean commit history
-- Proper .gitignore configuration
-
-### ✅ Documentation
-- README explains setup process
-- Terraform usage documented
-- All steps are clear
-
----
-
-## 📅 Recommended Timeline
-
-### Week 1:
-- **Days 1-3:** Terraform modules (VPC, Security Group, EC2)
-- **Days 4-5:** Test application locally, understand the code
-- **Days 6-7:** Initial deployment and troubleshooting
-
-### Week 2:
-- **Days 1-2:** CI workflow setup (test on PR)
-- **Days 3-4:** CD workflow (deploy on merge)
-- **Days 5-6:** Testing full pipeline, bug fixes
-- **Day 7:** Documentation and demo prep
-
-**Total Time:** ~2 weeks (15-25 hours)
-
----
-
-## 🎬 Demo Day Checklist
-
-Prepare to demonstrate:
-
-- [ ] Show GitHub repository structure
-- [ ] Show Terraform code and AWS resources
-- [ ] Run application locally
-- [ ] Show test execution and coverage
-- [ ] Create a feature branch and make a change
-- [ ] Open PR and show test workflow running
-- [ ] Merge PR and show deployment workflow
-- [ ] Access live application in browser
-- [ ] Show application functionality
-- [ ] Explain architecture and decisions
-
----
-
-## 💡 Tips for Success
-
-1. **Start Simple** - Get basic version working first, then add features
-2. **Test Frequently** - Don't wait until the end to test
-3. **Commit Often** - Small, frequent commits with clear messages
-4. **Document As You Go** - Don't leave documentation for the end
-5. **Ask for Help** - Use office hours, Slack, or discussion forums
-6. **Budget Time** - Infrastructure issues can take time to debug
-7. **Use .gitignore** - Never commit secrets or sensitive data
-8. **Test Manually First** - Before automating, do it manually
-9. **Read Error Messages** - They usually tell you what's wrong
-10. **Have Fun!** - This is a realistic project you can showcase
-
----
-
-## 🏆 Showcase Your Work
-
-After completing the project:
-
-### Portfolio:
-- Add to your GitHub profile
-- Include in your resume
-- Write a blog post about it
-
-### LinkedIn Post:
-Share your achievement with:
-- Link to GitHub repo
-- Screenshots/demo
-- Key learnings
-- Technologies used
-
-### Continue Learning:
-- Try bonus challenges
-- Explore other AWS services
-- Learn Kubernetes
-- Try other CI/CD tools
-
----
-
-## 📧 Submission
-
-### What to Submit:
-
-1. **GitHub Repository URL**
-   - Must be public or accessible to instructor
-   - All code committed and pushed
-
-2. **Live Application URL**
-   - EC2 public IP or domain
-   - Application must be running
-
-3. **Documentation**
-   - Complete README in repository
-   - Any additional notes or learnings
-
-4. **Demo Video** (Optional but recommended)
-   - 5-10 minute walkthrough
-   - Show PR → test → merge → deploy
-   - Demonstrate live application
-
-### Submission Deadline:
-**[To be announced by instructor]**
-
----
-
-## 🤝 Getting Help
-
-### Resources:
-- **Office Hours:** [Schedule TBD]
-- **Discussion Forum:** [Platform TBD]
-- **Slack Channel:** #mini-project-help
-
-### Before Asking for Help:
-1. Check the troubleshooting section
-2. Search error messages online
-3. Review relevant documentation
-4. Try to solve for 15-30 minutes
-
-### When Asking for Help:
-- Describe what you're trying to do
-- Share the error message
-- Explain what you've already tried
-- Provide relevant code snippets
-
----
-
-## 🎉 Ready to Start?
-
-This is your chance to bring together everything you've learned and build something real. Take it step by step, don't rush, and enjoy the process of building a complete DevOps pipeline from scratch!
-
-**Good luck, and happy coding! 🚀**
-
----
-
-*Last updated: June 2026*
+Also double check in the AWS Console that nothing was created manually outside of Terraform (e.g. security group rules added directly in the console) — `terraform destroy` only removes resources it's actually tracking in state.

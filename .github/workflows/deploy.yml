@@ -20,23 +20,21 @@ jobs:
                   python-version: "3.11"
 
             - name: Install dependencies
-              working-directory: app
               run: |
                   pip install -r requirements.txt
                   pip install flake8 bandit pytest-cov
 
             - name: flake8 Lint
-              working-directory: app
+
               run: |
                   flake8 . --exclude=venv,.venv
 
             - name: Security scan
-              working-directory: app
               run: |
                   bandit -r . -x ./tests
 
             - name: Run tests with coverage
-              working-directory: app
+
               run: |
                   pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=80
 
@@ -50,6 +48,7 @@ jobs:
                       sudo -u appuser bash -c "cd /home/appuser/app && git pull origin main && /home/appuser/app/venv/bin/pip install -r /home/appuser/app/app/requirements.txt"
                       sudo systemctl restart flask-app
                       sudo systemctl status flask-app --no-pager
+
             - name: Health check
               run: |
                   sleep 5
